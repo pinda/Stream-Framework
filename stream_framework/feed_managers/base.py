@@ -111,7 +111,7 @@ class Manager(object):
 
     metrics = get_metrics_instance()
 
-    def get_user_follower_ids(self, user_id):
+    def get_user_follower_ids(self, user_id, *args):
         '''
         Returns a dict of users ids which follow the given user grouped by
         priority/importance
@@ -143,7 +143,7 @@ class Manager(object):
         s = user_feed.activity_serializer(Activity)
         operation_kwargs = dict(activities=[s.dumps(activity)], trim=True)
 
-        for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id).items():
+        for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id, activity=activity).items():
             # create the fanout tasks
             for feed_class in self.feed_classes.values():
                 self.create_fanout_tasks(
@@ -170,7 +170,7 @@ class Manager(object):
         # no need to trim when removing items
         operation_kwargs = dict(activities=[s.dumps(activity)], trim=False)
 
-        for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id).items():
+        for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id, activity=activity).items():
             for feed_class in self.feed_classes.values():
                 self.create_fanout_tasks(
                     follower_ids,
