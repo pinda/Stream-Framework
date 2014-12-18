@@ -6,6 +6,7 @@ from stream_framework.tasks import fanout_operation_low_priority
 from stream_framework.utils import chunks
 from stream_framework.utils import get_metrics_instance
 from stream_framework.utils.timing import timer
+from stream_framework.activity import Activity
 import logging
 from stream_framework.feeds.redis import RedisFeed
 
@@ -139,7 +140,8 @@ class Manager(object):
         # now add to the user's personal feed
         user_feed = self.get_user_feed(user_id)
         user_feed.add(activity)
-        operation_kwargs = dict(activities=[activity], trim=True)
+        s = user_feed.activity_serializer(Activity)
+        operation_kwargs = dict(activities=[s.dumps(activity)], trim=True)
 
         for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id).items():
             # create the fanout tasks
@@ -147,7 +149,7 @@ class Manager(object):
                 self.create_fanout_tasks(
                     follower_ids,
                     feed_class,
-                    add_operation,
+                    'add_operation',
                     operation_kwargs=operation_kwargs,
                     fanout_priority=priority_group
                 )
@@ -164,16 +166,16 @@ class Manager(object):
         # but we do remove from the personal feed
         user_feed = self.get_user_feed(user_id)
         user_feed.remove(activity)
-
+        s = user_feed.activity_serializer()
         # no need to trim when removing items
-        operation_kwargs = dict(activities=[activity], trim=False)
+        operation_kwargs = dict(activities=[s.dumps(activity)], trim=False)
 
         for priority_group, follower_ids in self.get_user_follower_ids(user_id=user_id).items():
             for feed_class in self.feed_classes.values():
                 self.create_fanout_tasks(
                     follower_ids,
                     feed_class,
-                    remove_operation,
+                    'remove_operation',
                     operation_kwargs=operation_kwargs,
                     fanout_priority=priority_group
                 )
@@ -308,10 +310,16 @@ class Manager(object):
             msg_format, len(user_ids_chunks), len(follower_ids), chunk_size)
         tasks = []
         # now actually create the tasks
+
+        feed_str = '{0}.{1}'.format(type(self).__module__,
+                                    type(self).__name__)
+        feed_class_str = '{0}.{1}'.format(feed_class.__module__,
+                                          feed_class.__name__)
+       
         for ids_chunk in user_ids_chunks:
             task = fanout_task.delay(
-                feed_manager=self,
-                feed_class=feed_class,
+                feed_manager=feed_str,
+                feed_class=feed_class_str,
                 user_ids=ids_chunk,
                 operation=operation,
                 operation_kwargs=operation_kwargs
@@ -338,12 +346,20 @@ class Manager(object):
             with batch_context_manager as batch_interface:
                 logger.info(msg_format, feed_class, len(user_ids))
                 operation_kwargs['batch_interface'] = batch_interface
+
+                activity_list = operation_kwargs['activities']
+                del operation_kwargs['activities']
+                
                 for user_id in user_ids:
                     logger.debug('now handling fanout to user %s', user_id)
                     feed = feed_class(user_id)
-                    operation(feed, **operation_kwargs)
+                    activities = [feed.activity_serializer(Activity).loads(a) for a in activity_list]
+                    if operation == 'add_operation':
+                        add_operation(feed, activities, **operation_kwargs)
+                    else:
+                        remove_operation(feed, **operation_kwargs)
             logger.info('finished fanout for feed %s', feed_class)
-        fanout_count = len(operation_kwargs['activities']) * len(user_ids)
+        fanout_count = len(activity_list) * len(user_ids)
         self.metrics.on_fanout(feed_class, operation, fanout_count)
 
     def batch_import(self, user_id, activities, fanout=True, chunk_size=500):

@@ -102,13 +102,13 @@ class Activity(BaseActivity):
 
         :returns: int --the serialization id
         '''
-        if self.object_id >= 10 ** 10 or self.verb.id >= 10 ** 3:
+        if self.verb.id >= 10 ** 3:
             raise TypeError('Fatal: object_id / verb have too many digits !')
         if not self.time:
             raise TypeError('Cant serialize activities without a time')
         milliseconds = str(int(datetime_to_epoch(self.time) * 1000))
-        serialization_id_str = '%s%0.10d%0.3d' % (
-            milliseconds, self.object_id, self.verb.id)
+        serialization_id_str = '%s%0.3d' % (
+            milliseconds, self.verb.id)
         serialization_id = int(serialization_id_str)
         return serialization_id
 
@@ -121,7 +121,7 @@ class Activity(BaseActivity):
         field = object
         '''
         id_field = '%s_id' % field
-        if isinstance(object_, (int, long)):
+        if isinstance(object_, (int, long, str)):
             setattr(self, id_field, object_)
         elif object_ is None:
             setattr(self, field, None)

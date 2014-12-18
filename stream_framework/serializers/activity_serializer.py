@@ -1,8 +1,8 @@
 from stream_framework.serializers.base import BaseSerializer
 from stream_framework.utils import epoch_to_datetime, datetime_to_epoch
 from stream_framework.verbs import get_verb_by_id
-import pickle
 
+import json
 
 class ActivitySerializer(BaseSerializer):
 
@@ -29,7 +29,7 @@ class ActivitySerializer(BaseSerializer):
         extra_context = activity.extra_context.copy()
         pickle_string = ''
         if extra_context:
-            pickle_string = pickle.dumps(activity.extra_context)
+            pickle_string = json.dumps(activity.extra_context)
         parts += [activity_time, pickle_string]
         serialized_activity = ','.join(map(str, parts))
         return serialized_activity
@@ -38,15 +38,15 @@ class ActivitySerializer(BaseSerializer):
         parts = serialized_activity.split(',')
         # convert these to ids
         actor_id, verb_id, object_id, target_id = map(
-            int, parts[:4])
+            str, parts[:4])
         activity_datetime = epoch_to_datetime(float(parts[4]))
         pickle_string = str(parts[5])
         if not target_id:
             target_id = None
-        verb = get_verb_by_id(verb_id)
+        verb = get_verb_by_id(int(verb_id))
         extra_context = {}
         if pickle_string:
-            extra_context = pickle.loads(pickle_string)
+            extra_context = json.loads(pickle_string)
         activity = self.activity_class(actor_id, verb, object_id, target_id,
                                        time=activity_datetime, extra_context=extra_context)
 
